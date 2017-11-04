@@ -1,4 +1,5 @@
-﻿using System;
+﻿using LightCore.Business;
+using System;
 
 namespace LightCore
 {
@@ -6,7 +7,10 @@ namespace LightCore
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Hello World!");
+            var lightManager = new LightManager();
+            lightManager.Run();
+
+            Console.ReadLine();
         }
     }
 }
