@@ -204,6 +204,11 @@ namespace LightCore.Business
 
         private bool IsWeekday()
         {
+            if (DateTimeNow.Hour <= 3 && DateTimeNow.DayOfWeek == DayOfWeek.Sunday)
+            {
+                return DateTimeNow.DayOfWeek != DayOfWeek.Friday && DateTimeNow.DayOfWeek != DayOfWeek.Saturday && DateTimeNow.DayOfWeek != DayOfWeek.Sunday;
+            }
+
             return DateTimeNow.DayOfWeek != DayOfWeek.Friday && DateTimeNow.DayOfWeek != DayOfWeek.Saturday;
         }
     }
