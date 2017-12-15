@@ -11,19 +11,21 @@ namespace LightCore.Business
     {
         private readonly ITelldus _telldus;
         private readonly IWeatherProvider _weatherProvider;
+        private readonly ITresholdProvider _tresholdProvider;
         private DateTime? _sunset;
         private DateTime? _unitTestDateTime;
         private readonly Collection<LampSection> _sections;
 
         public LightManager()
-            : this(new TelldusManager(), new WeatherProvider())
+            : this(new TelldusManager(), new WeatherProvider(), new TresholdProvider())
         {
         }
 
-        public LightManager(ITelldus telldus, IWeatherProvider weatherProvider)
+        public LightManager(ITelldus telldus, IWeatherProvider weatherProvider, ITresholdProvider tresholdProvider)
         {
             _telldus = telldus;
             _weatherProvider = weatherProvider;
+            _tresholdProvider = tresholdProvider;
             _sections = new Collection<LampSection>();
             SetupSections();
         }
@@ -97,15 +99,50 @@ namespace LightCore.Business
 
             }
 
-            var timeLeft = _sunset.Value - DateTimeNow;
+            var treshold = _tresholdProvider.GetTreshold();
+            var currentValue = _tresholdProvider.GetCurrentValue();
 
-            if (_sections[0].State == State.Off && (timeLeft.TotalMinutes <= 60 && _sections[0].OnStateHandled == false))
+            if (_sections[0].State == State.Off && (DateTimeNow.Hour >= 10 && _sections[0].OnStateHandled == false))
+            {
+                if (currentValue > treshold)
+                {
+                    Console.WriteLine($"Treshold: {treshold}, Nuvarande värde: {currentValue}");
+                    Console.WriteLine($"{DateTimeNow:yyyy-MM-dd}: Skickar startsignal till alla lampor baserat på ljussensor {DateTimeNow:HH:mm}");
+                    _sections[0].State = State.On;
+                    _sections[0].OnStateHandled = true;
+                    _sections.ForEach(s =>
+                    {
+                        s.State = State.On;
+                        _telldus.TurnOn(s.SectionName);
+                    });
+                    return;
+                }
+            }
+
+            if (_sections[0].State == State.On && (currentValue < treshold && DateTimeNow < _sunset.Value))
+            {
+                Console.WriteLine($"Treshold: {treshold}, Nuvarande värde: {currentValue}");
+                Console.WriteLine($"{DateTimeNow:yyyy-MM-dd}: Skickar stoppsignal till alla lampor baserat på ljussensor {DateTimeNow:HH:mm}");
+                _sections[0].State = State.Off;
+                _sections[0].OnStateHandled = false;
+                _sections.ForEach(s =>
+                {
+                    s.State = State.Off;
+                    _telldus.TurnOff(s.SectionName);
+                });
+                return;
+            }
+
+            if (_sections[0].State == State.Off && (DateTimeNow >= _sunset.Value && _sections[0].OnStateHandled == false))
             {
                 Console.WriteLine($"{DateTimeNow:yyyy-MM-dd}: Skickar startsignal till alla lampor {DateTimeNow:HH:mm}");
-                _telldus.TurnOn("lampor");
                 _sections[0].State = State.On;
                 _sections[0].OnStateHandled = true;
-                _sections.ForEach(s => s.State = State.On);
+                _sections.ForEach(s => 
+                    {
+                        s.State = State.On;
+                        _telldus.TurnOn(s.SectionName);
+                    });
                 return;
             }
 

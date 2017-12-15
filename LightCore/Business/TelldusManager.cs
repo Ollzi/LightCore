@@ -1,43 +1,54 @@
 ﻿using LightCore.Contracts;
-using System.Diagnostics;
+using System;
+using System.IO;
+using System.Net;
 
 namespace LightCore.Business
 {
     public class TelldusManager : ITelldus
     {
+        private enum ApiAction
+        {
+            turn_on,
+            turn_off
+        }
+
         public void TurnOff(string section)
         {
-            var processStartInfo = new ProcessStartInfo(@"tdtool", $"--off {section}")
-            {
-                CreateNoWindow = true,
-                WindowStyle = ProcessWindowStyle.Hidden
-            };
-
-            RepeatProcess(5, processStartInfo);
+            CallHomeAssistantApi(ApiAction.turn_off, section);
         }
 
         public void TurnOn(string section)
         {
-            var processStartInfo = new ProcessStartInfo(@"tdtool", $"--on {section}")
-            {
-                CreateNoWindow = true,
-                WindowStyle = ProcessWindowStyle.Hidden
-            };
-
-            RepeatProcess(3, processStartInfo);
+            CallHomeAssistantApi(ApiAction.turn_on, section);
         }
 
-        private void RepeatProcess(int numberOfTimes, ProcessStartInfo processStartInfo)
+        private void CallHomeAssistantApi(ApiAction action, string section)
         {
-            int count = 0;
+            ServicePointManager.ServerCertificateValidationCallback = delegate { return true; };
+            var url = $"https://192.168.1.48:8123/api/services/switch/{action.ToString()}?api_password={Program.Configuration["Password"]}";
+            var httpWebRequest = (HttpWebRequest)WebRequest.Create(url);
+            httpWebRequest.ContentType = "application/json";
+            //httpWebRequest.Headers.Add("x-ha-access", "");
+            httpWebRequest.Method = "POST";
 
-            while (count <= numberOfTimes)
+            using (var streamWriter = new StreamWriter(httpWebRequest.GetRequestStream()))
             {
-                var process = Process.Start(processStartInfo);
-                process?.WaitForExit();
+                string json = $"{{\"entity_id\": \"switch.{section}\"}}";
 
-                System.Threading.Thread.Sleep(200);
-                count++;
+                streamWriter.Write(json);
+                streamWriter.Flush();
+                streamWriter.Close();
+            }
+
+            var httpResponse = (HttpWebResponse)httpWebRequest.GetResponse();
+            using (var streamReader = new StreamReader(httpResponse.GetResponseStream()))
+            {
+                var result = streamReader.ReadToEnd();
+                if (httpResponse.StatusCode != HttpStatusCode.OK)
+                {
+                    Console.WriteLine($"Misslyckades med anrop {httpResponse.ResponseUri}");
+                }
             }
         }
     }
